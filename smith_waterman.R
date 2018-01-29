@@ -4,8 +4,7 @@ smith_wat <- function(seq1, #character vector of length 1
                       seq2, # character vector of length 2
                       BLOSUM,
                       gap_penalty = 1.0,
-                      rev_seq2 = TRUE,
-                      gap_limit = 1) {
+                      rev_seq2 = TRUE) {
   if (!is.character(seq1) || (length('seq1') != 1)){
     stop()
   } else if (!is.character(seq2) || (length('seq2') != 1)) {
@@ -140,15 +139,12 @@ smith_wat <- function(seq1, #character vector of length 1
       } else if ((i == 0) || (j == 0)) {
         cont <- FALSE
       } else if (H[i,j] == 0) {
-        break
+        cont <- FALSE
       }
       if (gap_count == 0){
         out_seq1 <- c(out_seq1, seq1_append)
         out_seq2 <- c(out_seq2, seq2_append)
-      } else if (gap_count > gap_limit) {
-        break
-      }
-      
+        }
       
 
     } # end while loop
