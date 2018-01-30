@@ -1,3 +1,15 @@
+########### Instructions For Use  ###############
+# 1) Run this script via command line using 'Rscript test_smith_wat.R > output.txt'
+# * note: you need to have smith_waterman.R in the same directory as this script
+# 2) The printout in output.txt should list the test cases and their solutions.
+# for every solution, there should be a sequence alignment with rows:
+# seq1 = aligned sequence 1
+# align = alignment characters, with | = alignemtn, space = gap
+# seq2 = reverse of sequence 2, aligned to seq1
+# seq1 position = start and end positions of aligned sequence in sequence 1
+# seq2 position = same for seq2 (postions going 5' to 3')
+# an example output is provided with test_smith_wat_out.txt
+
 #### test smith waterman ####
 source('smith_waterman.R')
 

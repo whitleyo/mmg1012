@@ -1,10 +1,111 @@
 #### SMITH WATERMAN FUNCTION #####
 
+# trace back function recursively constructs sequences and adds them to a list of solutions
+# basically, the base case case is a situation where no branches are occured in traceback, and the termination condition of
+# having a '0' neighbor occurs
+# if a branch is encountered, for each branch direction, this function is called within itself, starting
+# a new frame for trace bcak
+
+# function is meant to be used within smith_wat function
+
+trace_back <- function(inp1, # character vector, used to seed the constructed sequence for seq1 alignment
+                       inp2, # same for sequence 2 alignment
+                       seq1, # actual sequence for seq1
+                       seq2, # same for seq2
+                       H, # matrix constructed in first part of smith waterman algorithm
+                       BLOSUM, # BLOSUM matrix (pairwise scoring matrix)
+                       i, # starting position in H
+                       j, # end position in H
+                       gap_penalty) {
+  
+  cont <- TRUE
+  gap_count <- 0
+  inp1_append <- ''
+  inp2_append <- ''
+  while(cont) {
+    # check neighbors
+    base_ind1 <- seq1[i-1]
+    base_ind2 <- seq2[j-1]
+    option1 <- H[i-1, j - 1] + BLOSUM[base_ind1, base_ind2]
+    option2 <- H[i -1, j] - gap_penalty #here we have a gap in seq 2
+    option3 <- H[i , j - 1] - gap_penalty # gap in seq 1
+    choices <- c(option1, option2, option3, 0)
+    choice <- which(choices %in% max(choices))
+      if (length(choice) == 1) { # if no branchpoints, append appropriate sequence characters
+          if (choice == 1) {
+            inp1 <- paste0 (inp1, base_ind1)
+            inp2 <- paste0(inp2, base_ind2)
+            i <- i - 1
+            j <- j - 1
+          } else if (choice == 2) {
+            inp1_append <- paste0(inp1_append, base_ind1)
+            inp2_append <- paste0(inp2_append, '-')
+            i <- i - 1
+            j <- j
+            gap_count <- gap_count + 1
+          } else if (choice == 3) {
+            inp1_append <- paste0(inp1, '-')
+            inp2_append <- paste0(inp2, base_ind2)
+            i <- i
+            j <- j - 1
+            gap_count <- gap_count + 1
+          } else if ((choice == 4) || (H[i,j] == 0)) {
+            cont <- FALSE
+            break
+          } else {
+            stop()
+          }
+        if (H[i,j] == 0) {
+          cont <- FALSE
+        }
+        }
+        else if (length(choice) > 1) { # if we have a branch point, then we recurse back into our traceback function and return a character vector of solutions
+          solution <- character() # character vector to contain all solutions found in branches
+          # first, append sequence, or make something to be appended
+          for (n in 1:length(choice)) {
+            if (choice[n] == 1) {
+              inp1 <- paste0 (inp1, base_ind1)
+              inp2 <- paste0(inp2, base_ind2)
+              ri <- i - 1
+              rj <- j - 1
+            } else if (choice[n] == 2) {
+              inp1 <- paste0(inp1, base_ind1)
+              inp2 <- paste0(inp2, '-')
+              ri <- i - 1
+              rj <- j
+            } else if (choice[n] == 3) {
+              inp1 <- paste0(inp1, '-')
+              inp2 <- paste0(inp2, base_ind2)
+              ri <- i
+              rj <- j -1
+            } else if ((choice[n] == 4) || (H[i,j] == 0)) {
+              cont <- FALSE
+            } else {
+              stop()
+            }
+            solution_n <- trace_back(inp1, inp2, seq1, seq2, H, BLOSUM, i = ri, j = rj, gap_penalty = gap_penalty)
+            solution <- c(solution, solution_n)
+          }
+        return(solution)
+          break
+        }
+      } # end while loop
+  start_pt <- c(as.character(i), as.character(j))
+  inp1 <- paste0(inp1, start_pt[1])
+  inp2 <- paste0(inp2, start_pt[2])
+  solution <- c(inp1, inp2)
+  return(solution)
+  } # end function
+
+##### SMITH WATERMAN FUNCTION ##########
+
+# implements smith waterman algorithm with max gap penalty of 1, considering gaps of length 1 for penalty
+# by default, second sequence is reversed in function
 smith_wat <- function(seq1, #character vector of length 1
                       seq2, # character vector of length 2
-                      BLOSUM,
+                      BLOSUM, # pairwise scorirng matrix
                       gap_penalty = 1.0,
-                      rev_seq2 = TRUE) {
+                      rev_seq2 = TRUE ) { # reverse sequence? default true
   if (!is.character(seq1) || (length('seq1') != 1)){
     stop()
   } else if (!is.character(seq2) || (length('seq2') != 1)) {
@@ -63,120 +164,72 @@ smith_wat <- function(seq1, #character vector of length 1
   # end for loop, H has been constructed
   
   ## TRACEBACK
+  # Find all maxima in H, and use recursive traceback function to find all solutions
   # Locate the max value in matrix
   end_pts <- which(H == max(H), arr.ind = TRUE)
   # in case there are multiple solutions
   solutions <- list()
   
-  gap_count <- 0
-  for (p in 1:nrow(end_pts)) {
-    i <- end_pts[p,1]
-    j <- end_pts[p,2]
-    end_s1 <- i-1
-    end_s2 <- j-1
-    out_seq1 <- character()
-    out_seq2 <- character()
-    cont <- TRUE
-    while(cont) {
-      # end condition is if 'max next' is 0
-      base1 <- rownames(H)[i]
-      base2 <- colnames(H)[j]
-      base1_ind <- which(base_set == base1)
-      base2_ind <- which(base_set == base2)
-      # Find H[i-1,j-1] + s(ai,bj)
-      opt1 <- H[i-1,j-1] + BLOSUM[base1_ind, base2_ind] # if max, then at i and j, perfect alignment
-      opt2 <- H[i - 1, j] - gap_penalty # if max, then gap in seq2 at this position
-      opt3 <- H[i, j - 1] - gap_penalty # if max, then gap in seq1 at this position
-      opts <- c(opt1, opt2, opt3, 0)
-      choice <- which(opts %in% max(opts))
-      if (length(choice) > 1) {
-        choice <- choice[1] # if more than one choice satisfies max score, take first option (i.e. direct alignment)
-      }
-      
-      if (choice == 1) { #if we have a 'match' for given pair
-        if(gap_count > 0) {
-          seq1_append <- c(seq1_append, rownames(H)[i])
-          seq2_append <- c(seq2_append, colnames(H)[j])
-        } else if(gap_count == 0) {
-          seq1_append <- rownames(H)[i]
-          seq2_append <- colnames(H)[j]
-        } else {
-          stop('this should not be possible')
-        }
-        gap_count <- 0
-        i <- i - 1 #back increment i and j
-        j <- j - 1
-      } else if (choice == 2) { # else if we have a gap in seq2 (columns)
-        if(gap_count > 0) {
-          seq1_append <- c(seq1_append, rownames(H)[i])
-          seq2_append <- c(seq2_append, '-')
-        } else if(gap_count == 0) {
-          seq1_append <- rownames(H)[i]
-          seq2_append <- '-'
-        } else {
-          stop('this should not be possible')
-        }
-        i <- i - 1
-        gap_count <- gap_count + 1
-      } else if (choice == 3) { # we have a gap in sequence 1
-        if(gap_count > 0) {
-          seq1_append <- c(seq1_append, '-')
-          seq2_append <- c(seq2_append, colnames(H)[j])
-        } else if(gap_count == 0) {
-          seq1_append <- '-'
-          seq2_append <- colnames(H)[j]
-        } else {
-          stop('this should not be possible')
-        }
-        j <- j -1
-        gap_count <- gap_count + 1
-      } else {
-        stop('for some reason choice not made')
-      }
-      # Terminate if the maximum of options is less than or equal to 0, or if we've hi i = 0 or j = 0
-      if (max(opts) <= 0) {
-        cont <- FALSE
-      } else if ((i == 0) || (j == 0)) {
-        cont <- FALSE
-      } else if (H[i,j] == 0) {
-        cont <- FALSE
-      }
-      if (gap_count == 0){
-        out_seq1 <- c(out_seq1, seq1_append)
-        out_seq2 <- c(out_seq2, seq2_append)
-        }
-      
-
-    } # end while loop
-    if ((length(out_seq1) > 0) && (length(out_seq2) > 0)) {
-      ali_seq <- rep('|', length(out_seq1))
-      ali_seq[out_seq1 == '-'] <- ' ' 
-      ali_seq[out_seq2 == '-'] <- ' '
-      ali_seq <- paste(rev(ali_seq), collapse = '')
-      ali_seq <- paste('  ', ali_seq, '  ')
-      start_s1 <- i-1
-      out_seq1 <- paste(rev(out_seq1), collapse = '')
-      out_seq2 <- paste(rev(out_seq2), collapse = '')
-      out_seq1 <- paste('5\'', out_seq1, '3\'')
-      if(rev_seq2) {
-        start_s2 <- length(seq2) - end_s2 + 1
-        end_s2 <- length(seq2) - (j- 1) + 1 
-        out_seq2 <- paste('3\'', out_seq2, '5\'')
-      } else {
-        out_seq2 <- paste('5\'', out_seq2, '3\'')
-      }
-      solutions[[p]] <- list( seq1_ali = out_seq1, alignment = ali_seq, seq2_ali = out_seq2, score = max(H), location = end_pts[p,],
-                              seq1_start_end = c(start_s1, end_s1), seq2_start_end = c(start_s2, end_s2))
-    } else {
-      solutions[[p]] <- list(score = max(H), location = end_pts[p,])
+  solution_list <- list()
+  solution_set <- character()
+  for (m in 1:nrow(end_pts)) {
+    i <- end_pts[m,1]
+    j <- end_pts [m,2]
+    inp1 <- paste0('seq1_', as.character(i - 1))
+    inp2 <- paste0('seq2_', as.character(j - 1))
+    solution_set_i <- trace_back(inp1, inp2, seq1, seq2, H, BLOSUM, i, j, gap_penalty)
+    solution_set <- c(solution_set, solution_set_i)
+  }
+  for (m in seq(2, length(solution_set), 2)) {
+    # slice and dice things with regular expressions to extract aligned sequences and their positions
+    # note that every two sequences in solution_set is an aligned pair
+    solution_list_i <- list(seq1_ali = character(), seq2_ali = character(), alignment = character(), ends1 = numeric(), ends2 = numeric())
+    seq1_ali <- solution_set[m-1]
+    ends1 <- regmatches(seq1_ali, regexpr('_[0-9]*', seq1_ali))
+    ends1 <- as.numeric(sub('_', '', ends1))
+    seq1_ali <- sub('[a-z]*[0-9]*_[0-9]*', '',  seq1_ali)
+    ends1 <- c(ends1, as.numeric(regmatches(seq1_ali, regexpr('[0-9]*$', seq1_ali))))
+    seq1_ali <- gsub('[0-9]*', '', seq1_ali)
+    seq1_ali <- gsub('[0-9]', '', seq1_ali)
+    seq2_ali <- solution_set[m]
+    ends2 <- regmatches(seq2_ali, regexpr('_[0-9]*', seq2_ali))
+    ends2 <- as.numeric(sub('_', '', ends2))
+    seq2_ali <- sub('[a-z]*[0-9]*_[0-9]*', '',  seq2_ali)
+    ends2 <- c(ends2, as.numeric(regmatches(seq2_ali, regexpr('[0-9]*$', seq2_ali))))
+    seq2_ali <- gsub('[0-9]*', '', seq2_ali)
+    seq2_ali <- gsub('[0-9]', '', seq2_ali)
+    if (rev_seq2) { # reverse positions of sequence to reflect forward sequence position
+      ends2[1] <- length(seq2) - ends2[1] + 1
+      ends2[2] <- length(seq2) - ends2[2] + 1
     }
-    
-    
-    
-  } # end larger for loop
-  return(solutions)
+    seq2_ali <- sub('[0-9]*', '', seq2_ali)
+    if (length(seq1_ali) == length(seq2_ali)) {
+      seq1_ali_split <- strsplit(seq1_ali, split = '')[[1]]
+      seq2_ali_split <- strsplit(seq2_ali, split = '')[[1]]
+      alignment <- rep('|', length(seq1_ali_split))
+      alignment[seq1_ali_split == '-'] <- ' '
+      alignment[seq2_ali_split == '-'] <- ' '
+      seq1_ali <- paste(rev(seq1_ali_split), collapse = '')
+      seq2_ali <- paste(rev(seq2_ali_split), collapse = '')
+      alignment <- paste(rev(alignment), collapse = '')
+    } else {
+      stop()
+    }
+    solution_list_i$seq1_ali <- seq1_ali
+    solution_list_i$seq2_ali <- seq2_ali
+    solution_list_i$alignment <- alignment
+    solution_list_i$ends1 <- rev(ends1)
+    solution_list_i$ends2 <- ends2
+    solution_list_i$score <- max(H)
+    solution_list[[m/2]] <- solution_list_i
+  }
+  
+  
+  return(solution_list)
 }
 
+######### PRINT SOLUTIONS ###########
+# take solutions object (list) from smith_wat function, and print summary of all alignments
 print_solutions <- function(solutions) {
   print(paste('MAX SCORE:', as.character(solutions[[1]]$score)))
   for (i in 1:length(solutions)) {
@@ -186,8 +239,8 @@ print_solutions <- function(solutions) {
     print(paste('align   ', solution_i$alignment))
     print(paste('seq2_ali', solution_i$seq2_ali))
     print('seq1 position')
-    print(solution_i$seq1_start_end)
+    print(solution_i$ends1)
     print('seq2 position')
-    print(solution_i$seq2_start_end)
+    print(solution_i$ends2)
   }
 }
