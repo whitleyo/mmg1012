@@ -32,4 +32,4 @@ for i in range(len(seq_list)):
 b = np.array([0.25, 0.25, 0.25, 0.25])
 nucleotides = ('A','C','G','U')
 
-(EMO, M, o, EMO_list) = as2.hardOOPs(S, o, b, k, nucleotides, delta = 0.10, max_iter = 10^3)
+(EMO, M, o, EMO_list) = as2.hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^3)

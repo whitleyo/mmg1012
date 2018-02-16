@@ -163,8 +163,8 @@ def calc_M(S, o, b, k, nucleotides):
     
     seqs = S.get_all_seqs()
     # make k x nucleotides matrix
-    M_mat = np.zeros((k, len(nucleotides)), dtype = int)
-    M_mat = np.matrix(M_mat)
+    M_mat = np.zeros((k, len(nucleotides)), dtype = float)
+    M_mat = np.matrix(M_mat, dtype = float)
     for kk in range(0,k,1):
         W_mat_kk = np.zeros(shape = (len(seqs), len(b)), dtype = int)
         for i in range(0,len(seqs)):
@@ -263,7 +263,7 @@ def calc_E(S, M, b, k, nucleotides):
         seq_i = seqs[i]
         LR_list_i = []
         
-        offset_range = range(1,(len(seq_i.get_seq()) - k + 1))
+        offset_range = np.arange(1,(len(seq_i.get_seq()) - k + 2)) # want 1:len-k + 1, python requires an extra 1 to be added
         for j in offset_range:
             
             offset_i_j = j
@@ -278,13 +278,14 @@ def calc_E(S, M, b, k, nucleotides):
             
         offset_i = offset_range[Max_LR_ind]
         if len(offset_i) > 1:
-            print('WARNING: Offset for sequence ' + str(i) + ' seq_id ' + seq_i.get_seq_id() +
+            print('WARNING: Offset for sequence ' + str(i) + ' seq_id ' + str(seq_i.get_seq_id()) +
                   ' has more than one optimal offset. Taking lowest of '+  str(len(offset_i)) + 
                   ' offsets' )
             print('offsets')
             print(offset_i)
-            offset_i = offset_i[0]
+            offset_i = int(offset_i[0])
         # add offset
+        offset_i = int(offset_i)
         offsets.add_offset(seq_id = seq_i.get_seq_id(), offset = offset_i)
         Max_LR_List.append(Max_LR_i)
         
