@@ -7,7 +7,7 @@ Created on Sun Feb 11 12:51:00 2018
 """
 
 import numpy as np
-
+import random as rand
 ################ Define Classes #############
 
 class nuc_seq:
@@ -41,12 +41,12 @@ class nuc_seq:
         try:
             start_ind = offset - 1
             end_ind = offset + k - 1
-            if start_ind < 0:
+            if start_ind < -1:
                 raise ValueError
             elif (end_ind > len(self.seq_list)):
                 raise ValueError
         except ValueError:
-            raise ValueError('offset must be between 1 and len(seq) - k + 1')
+            raise ValueError('offset must be between 0 and len(seq) - k + 1')
             
         subseq = ''
         
@@ -145,7 +145,7 @@ nucleotides['G'] = 3
 nucleotides['U'] = 4
 ### FUNCTIONS ####
 
-def calc_M(S, o, b, k, nucleotides):
+def calc_M(S, o, b, k, nucleotides, mode = 'hardOOPs'):
     # Calculate numpy matrix M given a set of sequences, an offset_list, b (a numpy array), and k (an integer)
     # output should be a k x len(nucleotides) matrix containing estimated frequencies
     # of nucleotides at poition kk in k
@@ -160,6 +160,9 @@ def calc_M(S, o, b, k, nucleotides):
             raise TypeError
     except TypeError:
         raise TypeError('S must be of class seq_set, o of type offset_list, b of type np.ndarray, k of type int')
+        
+    if not (mode in ['hardOOPs', 'hardZOOPs', 'gibbZOOPs', 'sim_anneal']):
+        raise ValueError('Mode must be one of following: hardOOPs, hardZOOPs, gibbZOOPs, sim_anneal')
     
     seqs = S.get_all_seqs()
     # make k x nucleotides matrix
@@ -172,16 +175,26 @@ def calc_M(S, o, b, k, nucleotides):
             seq_i = seqs[i]
             seq_id_i = seq_i.get_seq_id()
             offset_i = o.get_offset(seq_id_i)
+            # if offset is 0, either skip finding matches for seq_i position kk,
+            # or raise an error if running hardoops. The error should not be raised
+            # in case of hardoops if the offsets are set correctly in the E-step.
+            if offset_i == 0:
+                if mode == 'hardOOPs':
+                    raise ValueError('hardOOPs mode chosen, cannot have offsets of 0')
+                else:
+                    continue
+                
             subseq_i = seqs[i].get_subseq(k = k, offset = offset_i)
             subseq_i_list = subseq_i.get_seq()
             nuc = subseq_i_list[kk]
             W_mat_kk[i,:] = np.in1d(nucleotides, nuc).astype(dtype = int) # set row i column n to 1 if matches our nucleotide
             
             if np.sum(W_mat_kk[i:]) == 0:
-                print(nuc)
-                print('nuc')
-                print('nucleotide not found in nucleotide set provided')
-                raise ValueError
+                if mode == 'hardOOPs':
+                    print(nuc)
+                    print('nuc')
+                    print('nucleotide not found in nucleotide set provided')
+                    raise ValueError
         # calculate given row of M
         M_mat[kk,:] = W_mat_kk.sum(axis = 0) + b 
         M_mat[kk,:] = M_mat[kk,:]/np.sum(M_mat[kk,:])
@@ -238,7 +251,7 @@ def calc_log_LR(nuc_seq, M, b, nucleotides):
         
         
     
-def calc_E(S, M, b, k, nucleotides):
+def calc_E(S, M, b, k, nucleotides, mode = 'hardOOPs', T = None):
     # ACGU -> 1,2,3,4 for nucleotides
     if type(S) != seq_set:
         raise TypeError
@@ -253,37 +266,108 @@ def calc_E(S, M, b, k, nucleotides):
     M_shape = (np.shape(M) == (k, len(nucleotides)))
     if not (is_matrix and M_shape):
         raise TypeError
+    if not (mode in ['hardOOPs', 'hardZOOPs', 'gibbZOOPs', 'sim_anneal']):
+        raise ValueError('Mode must be one of following: hardOOPs, hardZOOPs, gibbZOOPs, sim_anneal')
+    
+    if mode == 'sim_anneal':
+        if type(T) != float:
+            raise TypeError('sim_anneal mode selected: T must be floating point number!')
     
     # Stores max likelihood ratios of sequences
     Max_LR_List = []
     offsets = offset_list()
+    
+    # set start of range for offsets to use.
+    if (mode == 'hardOOPs') or (mode == 'hardZOOPs'):
+        q = 1 
+    elif (mode == 'gibbZOOPs') or (mode == 'sim_anneal'):
+        q = 0
+    else:
+        print('Expect 1 of 4 modes to be satisfied')
+        assert(False)
     
     for i in range(0,len(seqs)):
         
         seq_i = seqs[i]
         LR_list_i = []
         
-        offset_range = np.arange(1,(len(seq_i.get_seq()) - k + 2)) # want 1:len-k + 1, python requires an extra 1 to be added
+        offset_range = np.arange(q,(len(seq_i.get_seq()) - k + 2)) # want q:len-k + 1, python requires an extra 1 to be added
+        ## Calculate log likelihood ratios
         for j in offset_range:
-            
             offset_i_j = j
-            subseq_i_j = seq_i.get_subseq(k = k, offset = offset_i_j)
-            LR_list_i.append(calc_log_LR(subseq_i_j, M, b, nucleotides))
+            if offset_i_j > 0:
+                subseq_i_j = seq_i.get_subseq(k = k, offset = offset_i_j)
+                LR_list_i.append(calc_log_LR(subseq_i_j, M, b, nucleotides))
+            elif offset_i_j == 0:
+                LR_list_i.append(int(1))
+            else:
+                raise ValueError('offset_i_j should be >= 0')
+        
+        if mode == 'hardOOPs':
+            ## take max likelihood ratio, pick the offset corresponding to it
+            Max_LR_i = max(LR_list_i)
+            Max_LR_ind = np.in1d(LR_list_i, Max_LR_i)
+            num_max = sum(Max_LR_ind.astype(dtype = int)) # number of maximum LR satisfying positions
+            if (num_max < 1):
+                raise ValueError('num_max should be greater than or equal to 1')
+            if Max_LR_i < 1:
+                offset_i = int(0)
+            else:
+                offset_i = offset_range[Max_LR_ind]
+                if len(offset_i) > 1:
+                    print('WARNING: Offset for sequence ' + str(i) + ' seq_id ' + str(seq_i.get_seq_id()) +
+                          ' has more than one optimal offset. Taking lowest of '+  str(len(offset_i)) + 
+                          ' offsets' )
+                    print('offsets')
+                    print(offset_i)
+                    offset_i = int(offset_i[0])
+                
+        elif mode == 'hardZOOPs':
+            ## Calculate max log ratio, if < 1, set offset to 0
+            # get max Log likelihood ratio
+            Max_LR_i = max(LR_list_i)
+            Max_LR_ind = np.in1d(LR_list_i, Max_LR_i)
+            num_max = sum(Max_LR_ind.astype(dtype = int))
+            if (num_max < 1):
+                raise ValueError('num_max should be greater than or equal to 1')
+            if Max_LR_i < 1: # if max likelihood ratio less than 
+                Max_LR_i = 1
+                offset_i = 0
+            else:
+                offset_i = offset_range[Max_LR_ind]
+                if len(offset_i) > 1:
+                    print('WARNING: Offset for sequence ' + str(i) + ' seq_id ' + str(seq_i.get_seq_id()) +
+                          ' has more than one optimal offset. Taking lowest of '+  str(len(offset_i)) + 
+                          ' offsets' )
+                    print('offsets')
+                    print(offset_i)
+                    offset_i = int(offset_i[0])
+                    
+        elif (mode == 'gibbZOOPs') or (mode == 'sim_anneal'):
+            ## Calculate g(p) as outlined in handout
+            # LR_list_i holds the log likelihood ratios for each
+            offset_probs = np.array(LR_list_i, dtype = float)
+            if mode == 'sim_anneal': #if simulated annealing, moderate probabilit by temperature factor
+                offset_probs = np.power(offset_probs, T)
+            gp_vect = offset_probs/np.sum(offset_probs) # 
+            ##sample offset_i from g[p] distribution
+            # basic procecdure: pick a random num 0<x<1.
+            # sum gp_vect[0:j] (cumulative probability up to j) > x, index j set to true
+            # pick lowest index j, and offset j is selected
+            pick_num = rand.randrange(0,1000)/1000
             
-        Max_LR_i = max(LR_list_i)
-        Max_LR_ind = np.in1d(LR_list_i, Max_LR_i)
-        num_max = sum(Max_LR_ind.astype(dtype = int))
-        if (num_max < 1):
-            raise ValueError('num_max should be greater than 1')
+            for j in range(0,len(gp_vect)):
+                
+                if np.sum(gp_vect[0:j]) >= pick_num:
+                    offset_i = j
+                    break
+                #below if statement a sanity check: if you haven't picked an index,
+                # something's wrong because sum(gp_vect[0:len(gp_vect)]) should be 1
+                if j == (len(gp_vect) - 1):
+                    raise ValueError('j hit end of gp_vect, offset_i still not assigned')
+        
             
-        offset_i = offset_range[Max_LR_ind]
-        if len(offset_i) > 1:
-            print('WARNING: Offset for sequence ' + str(i) + ' seq_id ' + str(seq_i.get_seq_id()) +
-                  ' has more than one optimal offset. Taking lowest of '+  str(len(offset_i)) + 
-                  ' offsets' )
-            print('offsets')
-            print(offset_i)
-            offset_i = int(offset_i[0])
+            
         # add offset
         offset_i = int(offset_i)
         offsets.add_offset(seq_id = seq_i.get_seq_id(), offset = offset_i)
@@ -296,7 +380,7 @@ def calc_E(S, M, b, k, nucleotides):
 ##### END FUNCTION ###############
     
     
-def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5):
+def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5, mode = 'hardOOPs'):
     
     if type(S) != seq_set:
         raise TypeError
@@ -306,19 +390,23 @@ def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5):
         raise TypeError
     if type(k) != int:
         raise TypeError
-    
-    
-    EMO_list = []
+    if not (mode in ['hardOOPs', 'hardZOOPs', 'gibbZOOPs', 'sim_anneal']):
+        raise ValueError('Mode must be one of following: hardOOPs, hardZOOPs, gibbZOOPs, sim_anneal')
+
+    # initialize empty containers for log EMO calculated values and determined offsets after each E step
+    EMO_list = [] 
+    o_list = []
     cont = True
     N = 0
     while cont == True:
-        N += 1
-        M = calc_M(S, o, b, k, nucleotides)
-        (EMO, o_new) = calc_E(S, M, b, k, nucleotides)
+        if mode == 'sim_anneal':
+            T = N
+        M = calc_M(S, o, b, k, nucleotides, mode)
+        (EMO, o_new) = calc_E(S, M, b, k, nucleotides, mode, T) # calculate log EMO, determine new offsets
         o = o_new
         print('iteration')
         print(N)
-        if N > 1:
+        if N > 0:
             delta_N = EMO - last_EMO
             if delta_N < abs(delta):
                 cont = False
@@ -326,8 +414,23 @@ def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5):
             cont = False
         last_EMO = EMO
         EMO_list.append(EMO)
+        o_list.append(o) 
+        N += 1
+    
+    EMO_list = np.array(EMO_list)
+    o_list = np.ndarray(o_list)
+    if mode == 'gibbZOOPs':
         
-    return(EMO, M, o, EMO_list)
+        max_EMO = np.max(EMO_list)
+        max_EMO_ind = np.in1d(EMO_list, max_EMO)
+        max_offset = o_list[max_EMO_ind]
+        if np.sum(max_EMO_ind.astype(dtype = int)) > 1:
+            print('WARNING, more than 1 maximum reached, taking location of first maximum reached')
+            max_offset = max_offset[0]
+            
+        o = max_offset
+        M = calc_M(S, o, b, k, nucleotides, mode)
+    return(EMO, M, o, EMO_list, o_list)
         
 ### END FUNCTION
     
