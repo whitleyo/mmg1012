@@ -87,7 +87,7 @@ class seq_set:
         seqs_return = []
         
         for i in range(0, len(seq_ids)):
-            seq_id_i = seq_id[i]
+            seq_id_i = seq_ids[i]
             if not (seq_id_i == int):
                 raise TypeError('seq_ids must be list of sequence ids')
             ind = self.id_mapping[seq_id_i]
@@ -273,8 +273,8 @@ def calc_E(S, M, b, k, nucleotides, mode = 'hardOOPs', T = None):
         if type(T) != float:
             raise TypeError('sim_anneal mode selected: T must be floating point number!')
     
-    # Stores max likelihood ratios of sequences
-    Max_LR_List = []
+    # Stores max/chosen likelihood ratios of sequences
+    choose_LR_List = []
     offsets = offset_list()
     
     # set start of range for offsets to use.
@@ -321,6 +321,8 @@ def calc_E(S, M, b, k, nucleotides, mode = 'hardOOPs', T = None):
                     print('offsets')
                     print(offset_i)
                     offset_i = int(offset_i[0])
+                    
+            choose_LR_i = Max_LR_i
                 
         elif mode == 'hardZOOPs':
             ## Calculate max log ratio, if < 1, set offset to 0
@@ -343,13 +345,15 @@ def calc_E(S, M, b, k, nucleotides, mode = 'hardOOPs', T = None):
                     print(offset_i)
                     offset_i = int(offset_i[0])
                     
+            choose_LR_i = Max_LR_i
+                    
         elif (mode == 'gibbZOOPs') or (mode == 'sim_anneal'):
             ## Calculate g(p) as outlined in handout
-            # LR_list_i holds the log likelihood ratios for each
-            offset_probs = np.array(LR_list_i, dtype = float)
+            # LR_list_i holds the log likelihood ratios for each. We want actual likelihood ratios
+            offset_probs = np.exp(np.array(LR_list_i, dtype = float))
             if mode == 'sim_anneal': #if simulated annealing, moderate probabilit by temperature factor
                 offset_probs = np.power(offset_probs, T)
-            gp_vect = offset_probs/np.sum(offset_probs) # 
+            gp_vect = offset_probs/np.sum(offset_probs) # g(p) = rpi/sum(rqi) q = 0:len(seq) - k + 1
             ##sample offset_i from g[p] distribution
             # basic procecdure: pick a random num 0<x<1.
             # sum gp_vect[0:j] (cumulative probability up to j) > x, index j set to true
@@ -360,27 +364,30 @@ def calc_E(S, M, b, k, nucleotides, mode = 'hardOOPs', T = None):
                 
                 if np.sum(gp_vect[0:j]) >= pick_num:
                     offset_i = j
+                    my_str = 'found offset for seq' + str(i) + ' offset = ' + str(j)
+                    print(my_str)
                     break
                 #below if statement a sanity check: if you haven't picked an index,
                 # something's wrong because sum(gp_vect[0:len(gp_vect)]) should be 1
-                if j == (len(gp_vect) - 1):
+                if j == (len(gp_vect)):
                     raise ValueError('j hit end of gp_vect, offset_i still not assigned')
         
-            
+            choose_LR_i = LR_list_i[j]
             
         # add offset
         offset_i = int(offset_i)
         offsets.add_offset(seq_id = seq_i.get_seq_id(), offset = offset_i)
-        Max_LR_List.append(Max_LR_i)
+        choose_LR_List.append(choose_LR_i)
         
     ## end for loop
-    EMO = sum(Max_LR_List)
+    EMO = sum(choose_LR_List)
+    EMO = EMO[0,0]
     return(EMO, offsets)
     
 ##### END FUNCTION ###############
     
     
-def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5, mode = 'hardOOPs'):
+def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = np.power(10,3), mode = 'hardOOPs'):
     
     if type(S) != seq_set:
         raise TypeError
@@ -394,6 +401,8 @@ def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5, mode = 'har
         raise ValueError('Mode must be one of following: hardOOPs, hardZOOPs, gibbZOOPs, sim_anneal')
 
     # initialize empty containers for log EMO calculated values and determined offsets after each E step
+    if mode != 'sim_anneal':
+        T = None
     EMO_list = [] 
     o_list = []
     cont = True
@@ -408,9 +417,10 @@ def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5, mode = 'har
         print(N)
         if N > 0:
             delta_N = EMO - last_EMO
-            if delta_N < abs(delta):
-                cont = False
-        elif N >= max_iter:
+            if mode != 'gibbZOOPs':
+                if delta_N < abs(delta):
+                    cont = False
+        if N >= max_iter:
             cont = False
         last_EMO = EMO
         EMO_list.append(EMO)
@@ -418,17 +428,17 @@ def hardOOPs(S, o, b, k, nucleotides, delta = 0.01, max_iter = 10^5, mode = 'har
         N += 1
     
     EMO_list = np.array(EMO_list)
-    o_list = np.ndarray(o_list)
+    #o_list = np.ndarray(o_list)
     if mode == 'gibbZOOPs':
         
         max_EMO = np.max(EMO_list)
         max_EMO_ind = np.in1d(EMO_list, max_EMO)
-        max_offset = o_list[max_EMO_ind]
+        max_offset = np.array(o_list)[max_EMO_ind]
         if np.sum(max_EMO_ind.astype(dtype = int)) > 1:
             print('WARNING, more than 1 maximum reached, taking location of first maximum reached')
             max_offset = max_offset[0]
             
-        o = max_offset
+        o = max_offset[0]
         M = calc_M(S, o, b, k, nucleotides, mode)
     return(EMO, M, o, EMO_list, o_list)
         
