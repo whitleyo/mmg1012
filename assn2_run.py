@@ -10,12 +10,14 @@ import assn2_classes as as2
 import re
 import numpy as np
 import sys
+from matplotlib import pyplot as plt
+import os
 
-def test_assignment2(fname, mode):
+def test_assignment2(fname, input_dir, mode, max_iter):
     
     
     
-    fileobj = open(fname)
+    fileobj = open(os.path.join(input_dir, fname))
     seq_list = []
     for line in fileobj:
         
@@ -43,7 +45,8 @@ def test_assignment2(fname, mode):
         ## hardOOPs
         print('hardOOPs')
         (EMO, M, o_output, EMO_list, o_list) = as2.hardOOPs(S, o, b, k, nucleotides, 
-                                                            delta = 0.01, max_iter = np.power(10,3))
+                                                            delta = 0.01, max_iter = max_iter)
+        print('========= RESULTS =======')
         print('log E(M,o)')
         print(EMO)
         print('Matrix M: rows (A,C,G,U), columns k = 1:6')
@@ -55,7 +58,8 @@ def test_assignment2(fname, mode):
         print('getting results for first test case')
         print('hardZOOPs')
         (EMO, M, o_output, EMO_list, o_list) = as2.hardOOPs(S, o, b, k, nucleotides, 
-                                                        delta = 0.01, max_iter = np.power(10,3), mode = 'hardZOOPs')
+                                                        delta = 0.01, max_iter = max_iter, mode = 'hardZOOPs')
+        print('========= RESULTS =======')
         print('log E(M,o)')
         print(EMO)
         print('Matrix M: rows (A,C,G,U), columns k = 1:6')
@@ -67,12 +71,13 @@ def test_assignment2(fname, mode):
         print('getting results for first test case')
         print('gibbZOOPs')
         (EMO, M, o_output, EMO_list, o_list) = as2.hardOOPs(S, o, b, k, nucleotides, 
-                                                        delta = 0.01, max_iter = np.power(10,3), mode = 'gibbZOOPs')
+                                                        delta = 0.01, max_iter = max_iter, mode = 'gibbZOOPs')
         ## Get location of highest log EMO
         EMO_ind = np.in1d(EMO_list, EMO)
         loc_EMO = np.array(range(0,len(EMO_list)))[EMO_ind]
         if len(loc_EMO) > 1:
             loc_EMO = loc_EMO[0]
+        print('========= RESULTS =======')
         print('log E(M,o)')
         print(EMO)
         print('Matrix M: rows (A,C,G,U), columns k = 1:6')
@@ -87,7 +92,8 @@ def test_assignment2(fname, mode):
         print('getting results for first test case')
         print('simulated annealing')
         (EMO, M, o_output, EMO_list, o_list) = as2.hardOOPs(S, o, b, k, nucleotides, 
-                                                        delta = 0.01, max_iter = np.power(10,3), mode = 'sim_anneal')
+                                                        delta = 0.01, max_iter = max_iter, mode = 'sim_anneal')
+        print('========= RESULTS =======')
         print('log E(M,o)')
         print(EMO)
         print('Matrix M: rows (A,C,G,U), columns k = 1:6')
@@ -98,11 +104,25 @@ def test_assignment2(fname, mode):
         raise ValueError('mode must be one of following: hardOOPs, hardZOOPs, gibbZOOPs, or sim_anneal')
         
     fileobj.close()
+    plot_file_prefix = fname
+    plot_fname = plot_file_prefix + '_' +  mode +  '_log_E_v_iteration.png'
+    log_E = EMO_list
+    iteration = range(0,len(EMO_list))
+    p = plt.figure()
+    ax1 = p.add_subplot(111)
+    ax1.plot( iteration, log_E, alpha=0.5)
+    ax1.set_xlabel("iteration", fontsize=15)
+    ax1.set_ylabel("log E(M, o)", fontsize=15)
+    ax1.set_title(plot_fname)
+    plt.savefig(plot_fname)
+    del p
+    
+    return((EMO, M, o_output, EMO_list, o_list))
         
     
 ################################################################################
 
 if __name__ == '__main__':
-    test_assignment2(fname = sys.argv[1], mode = sys.argv[2])
+    test_assignment2(fname = sys.argv[1], mode = sys.argv[3], max_iter = int(sys.argv[4]), input_dir = sys.argv[2])
     
     
